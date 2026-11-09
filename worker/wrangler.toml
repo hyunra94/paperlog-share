@@ -1,0 +1,23 @@
+name = "paperlog-share"
+main = "worker.js"
+compatibility_date = "2026-05-29"
+
+# 비밀값은 아래 명령으로 따로 넣는다 (파일에 적지 않음)
+#   npx wrangler secret put NOTION_TOKEN   ← PaperLog Worker와 같은 Notion 토큰
+#   npx wrangler secret put ADMIN_KEY      ← 공유 앱 관리자 로그인 코드 (PaperLog SECRET_KEY와 다르게!)
+
+[vars]
+# 공유 앱이 열리는 주소. 여러 개면 쉼표로 구분
+CORS_ORIGIN = "https://hyunra94.github.io,http://localhost:5173"
+NOTION_PROJECT_DB_ID = "1ff6b59b-151a-81ab-89da-000b670b3d57"
+NOTION_SCHEDULE_DB_ID = "1ff6b59b-151a-8124-9557-000b4f60b050"
+NOTION_EXPENSE_DB_ID = "2fc6b59b-151a-8192-b855-000b2eda1402"
+# Notion에 추가될 속성 이름 (바꾸고 싶으면 여기서)
+SHARE_OWNER_PROP = "공유 담당자"
+SHARE_AUTHOR_PROP = "공유 작성자"
+
+# 공유 설정·로그인 세션 저장소. 아래 명령으로 만든 뒤 나온 id를 넣는다
+#   npx wrangler kv namespace create SHARE_KV
+[[kv_namespaces]]
+binding = "SHARE_KV"
+id = "REPLACE_WITH_SHARE_KV_ID"

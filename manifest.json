@@ -1,0 +1,16 @@
+{
+  "name": "같이 쓰는 Paper Log",
+  "short_name": "같이 Paper Log",
+  "description": "Paper Log의 일부 일정과 가계부를 함께 보는 앱",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf7ed",
+  "theme_color": "#fbf7ed",
+  "lang": "ko-KR",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
