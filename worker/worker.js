@@ -1,6 +1,6 @@
 /* =========================================================
    Paper Log Share Worker
-   - PaperLog의 일부(공개한 프로젝트의 일정, 공개한 카테고리의 지출)만
+   - PaperLog의 일부('공유 안 함'에 체크하지 않은 일정, 공개한 카테고리의 지출)만
      여러 사람과 함께 보고 쓰는 공유 앱용 Worker.
    - PaperLog 본 Worker의 SECRET_KEY는 쓰지 않는다. 같은 NOTION_TOKEN을 쓰지만
      이 Worker의 API는 공개 범위 밖의 데이터를 읽거나 쓰지 않는다.
@@ -44,7 +44,7 @@ export default {
         return json({ ok: true, me: publicMe(session), ...publicConfig(config) }, 200, cors);
       }
 
-      if (path === "/api/schedules" && method === "GET") return json({ ok: true, schedules: await listSchedules(url, env) }, 200, cors);
+      if (path === "/api/schedules" && method === "GET") return json({ ok: true, schedules: await listSchedules(url, env, session) }, 200, cors);
       if (path === "/api/schedules" && method === "POST") return json({ ok: true, item: await createSchedule(request, env, session) }, 200, cors);
       if (path === "/api/schedules" && method === "PATCH") return json({ ok: true, item: await updateSchedule(request, env, session) }, 200, cors);
       if (path === "/api/schedules" && method === "DELETE") return json({ ok: true, ...(await deleteSchedule(request, env, session)) }, 200, cors);
@@ -118,8 +118,16 @@ function props(env) {
     },
     owner: env.SHARE_OWNER_PROP || "공유 담당자",
     author: env.SHARE_AUTHOR_PROP || "공유 작성자",
+    memo: env.SHARE_MEMO_PROP || "공유 메모",   // 일정 DB: 하자·AS 상황 등 함께 보는 메모 (텍스트)
+    kind: env.SHARE_KIND_PROP || "공유 분류",   // 일정 DB: 일정 / 하자·AS (선택)
+    hide: env.SHARE_HIDE_PROP || "공유 안 함",  // 일정 DB: 체크하면 공유 앱에 안 보임 (체크박스)
   };
 }
+
+// 가계부 공유 범위 기본값: '공유' 카테고리
+function scopeName(env) { return env.SHARE_SCOPE_NAME || "공유"; }
+const KINDS = ["일정", "하자·AS"];
+const MEMO_MAX = 2000;
 
 async function readBody(request) {
   try { return await request.json(); } catch { return {}; }
@@ -139,10 +147,9 @@ async function getConfig(env) {
   return {
     appName: "같이 쓰는 Paper Log",
     ownerName: "관리자",
-    projects: [],      // [{ id, title }]
-    categories: [],    // ["식비", ...]
+    categories: [scopeName(env)], // 기본: '공유' 카테고리만
     defaultScheduleCategory: "",
-    members: [],       // [{ name, salt, hash }]
+    members: [],                  // [{ name, salt, hash }]
     ...(raw || {}),
   };
 }
@@ -151,7 +158,6 @@ function publicConfig(config) {
   return {
     appName: config.appName,
     ownerName: config.ownerName,
-    projects: config.projects,
     categories: config.categories,
     people: [config.ownerName, ...config.members.map(m => m.name)],
   };
@@ -242,11 +248,6 @@ async function saveAdminConfig(request, env) {
   if (body.ownerName !== undefined) config.ownerName = clean(body.ownerName, 40) || config.ownerName;
   if (body.defaultScheduleCategory !== undefined) config.defaultScheduleCategory = clean(body.defaultScheduleCategory, 40);
 
-  if (Array.isArray(body.projects)) {
-    config.projects = body.projects
-      .filter(p => p && p.id)
-      .map(p => ({ id: clean(p.id, 64), title: clean(p.title, 100) }));
-  }
   if (Array.isArray(body.categories)) {
     config.categories = [...new Set(body.categories.map(c => clean(c, 60)).filter(Boolean))];
   }
@@ -383,63 +384,71 @@ function mapSchedule(page, env, config) {
   const P = props(env);
   const p = page.properties || {};
   const d = readDate(p, P.schedule.date);
-  const projectIds = readRelation(p, P.schedule.project);
-  const shared = new Map(config.projects.map(x => [normId(x.id), x]));
-  const projects = projectIds.map(id => shared.get(normId(id))).filter(Boolean);
   const owner = readText(p, P.owner);
   return {
     id: page.id,
     title: readTitle(p) || "제목 없음",
     ...d,
     canceled: readCheckbox(p, P.schedule.cancel),
-    projects: projects.map(x => ({ id: x.id, title: x.title })),
+    hidden: readCheckbox(p, P.hide),
     owner: owner || config.ownerName,
     author: readText(p, P.author),
-    _ownerRaw: owner,
+    kind: KINDS.includes(readText(p, P.kind)) ? readText(p, P.kind) : KINDS[0],
+    memo: readText(p, P.memo),
   };
 }
 
-function scheduleInScope(item) {
-  return item.projects.length > 0;
+// 공유 범위: '공유 안 함'에 체크하지 않은 일정 전부.
+// 체크한 일정은 멤버에게는 아예 내려주지 않고, 관리자에게만 '숨김' 표시로 보여 준다(다시 풀 수 있게).
+function scheduleVisible(item, session) {
+  return session.admin || !item.hidden;
 }
 
-async function listSchedules(url, env) {
+async function listSchedules(url, env, session) {
   const config = await getConfig(env);
-  if (!config.projects.length) return [];
   const P = props(env);
+
+  // 하자·AS 기록: 날짜와 상관없이 전부, 최근 것부터
+  if (url.searchParams.get("kind") === "as") {
+    let pages;
+    try {
+      pages = await notionQueryAll(env, env.NOTION_SCHEDULE_DB_ID, {
+        filter: { property: P.kind, select: { equals: KINDS[1] } },
+        sorts: [{ property: P.schedule.date, direction: "descending" }],
+      });
+    } catch { return []; } // 아직 '공유 분류' 속성이 없으면 기록도 없음
+    return pages
+      .map(pg => mapSchedule(pg, env, config))
+      .filter(it => scheduleVisible(it, session) && !it.canceled);
+  }
+
   const from = isDate(url.searchParams.get("from")) ? url.searchParams.get("from") : monthRange().from;
   const to = isDate(url.searchParams.get("to")) ? url.searchParams.get("to") : monthRange().to;
-
-  // 공개 프로젝트 중 하나라도 연결된 일정만 Notion에서 가져온다.
-  const projectFilter = config.projects.map(x => ({ property: P.schedule.project, relation: { contains: x.id } }));
-  const filter = {
-    and: [
+  // '공유 안 함' 속성이 아직 없을 수도 있어서 체크 여부는 코드에서 거른다.
+  const pages = await notionQueryAll(env, env.NOTION_SCHEDULE_DB_ID, {
+    filter: { and: [
       { property: P.schedule.date, date: { on_or_after: subtractDays(from, RANGE_LOOKBACK_DAYS) } },
       { property: P.schedule.date, date: { on_or_before: to } },
-      projectFilter.length === 1 ? projectFilter[0] : { or: projectFilter },
-    ],
-  };
-  const pages = await notionQueryAll(env, env.NOTION_SCHEDULE_DB_ID, {
-    filter, sorts: [{ property: P.schedule.date, direction: "ascending" }],
+    ] },
+    sorts: [{ property: P.schedule.date, direction: "ascending" }],
   });
 
   return pages
     .map(pg => mapSchedule(pg, env, config))
-    .filter(it => scheduleInScope(it) && !it.canceled && it.date && (it.endDate || it.date) >= from)
-    .map(({ _ownerRaw, ...it }) => it);
+    .filter(it => scheduleVisible(it, session) && !it.canceled && it.date && (it.endDate || it.date) >= from);
 }
 
-async function loadScheduleInScope(env, config, id) {
+async function loadScheduleInScope(env, config, id, session) {
   if (!id) throw httpError(400, "id가 필요해요.");
   const page = await notion(env, `/pages/${id}`);
   if (page.archived || page.in_trash) throw httpError(404, "이미 삭제된 일정이에요.");
   if (normId(page.parent?.data_source_id) !== normId(env.NOTION_SCHEDULE_DB_ID)) throw httpError(404, "공유된 일정이 아니에요.");
   const item = mapSchedule(page, env, config);
-  if (!scheduleInScope(item)) throw httpError(404, "공유된 일정이 아니에요.");
+  if (!scheduleVisible(item, session)) throw httpError(404, "공유된 일정이 아니에요.");
   return item;
 }
 
-function scheduleFields(body, config, env, { create }) {
+function scheduleFields(body, config, env, session, { create }) {
   const P = props(env);
   const out = {};
   if (create || body.title !== undefined) {
@@ -453,10 +462,15 @@ function scheduleFields(body, config, env, { create }) {
     const endDate = isDate(body.endDate) && body.endDate >= body.date ? body.endDate : "";
     out[P.schedule.date] = { date: datePayload(body.date, time, endDate) };
   }
-  if (create || body.projectId !== undefined) {
-    const proj = config.projects.find(x => normId(x.id) === normId(body.projectId));
-    if (!proj) throw httpError(400, "공유된 프로젝트를 골라 주세요.");
-    out[P.schedule.project] = { relation: [{ id: proj.id }] };
+  if (create || body.kind !== undefined) {
+    out[P.kind] = selectProp(KINDS.includes(body.kind) ? body.kind : KINDS[0]);
+  }
+  if (create || body.memo !== undefined) {
+    out[P.memo] = nameProp(String(body.memo ?? "").replace(/\r\n/g, "\n").trim().slice(0, MEMO_MAX));
+  }
+  // '공유 안 함'은 관리자만 바꿀 수 있다.
+  if (body.hidden !== undefined && session.admin) {
+    out[P.hide] = { checkbox: Boolean(body.hidden) };
   }
   if (create && config.defaultScheduleCategory) {
     out[P.schedule.category] = selectProp(config.defaultScheduleCategory);
@@ -471,7 +485,7 @@ async function createSchedule(request, env, session) {
   const owner = clean(body.owner, 40) || session.name;
   if (!validPerson(owner, config)) throw httpError(400, "담당자를 확인해 주세요.");
 
-  const properties = scheduleFields(body, config, env, { create: true });
+  const properties = scheduleFields(body, config, env, session, { create: true });
   properties[P.owner] = selectProp(owner);
   properties[P.author] = nameProp(session.name);
 
@@ -479,41 +493,31 @@ async function createSchedule(request, env, session) {
     parent: { type: "data_source_id", data_source_id: env.NOTION_SCHEDULE_DB_ID },
     properties,
   });
-  const { _ownerRaw, ...item } = mapSchedule(page, env, config);
-  return item;
+  return mapSchedule(page, env, config);
 }
 
 async function updateSchedule(request, env, session) {
   const config = await getConfig(env);
   const body = await readBody(request);
   const P = props(env);
-  const current = await loadScheduleInScope(env, config, body.id);
+  const current = await loadScheduleInScope(env, config, body.id, session);
   if (!canEdit(current, session, config)) throw httpError(403, "내 일정이나 내가 입력한 일정만 고칠 수 있어요.");
 
-  const properties = scheduleFields(body, config, env, { create: false });
+  const properties = scheduleFields(body, config, env, session, { create: false });
   if (body.owner !== undefined) {
     const owner = clean(body.owner, 40);
     if (!validPerson(owner, config)) throw httpError(400, "담당자를 확인해 주세요.");
     properties[P.owner] = selectProp(owner);
   }
 
-  // 공유 프로젝트 외에 원래 연결돼 있던(비공개) 프로젝트는 지우지 않고 유지한다.
-  if (properties[P.schedule.project]) {
-    const page = await notion(env, `/pages/${current.id}`);
-    const sharedIds = new Set(config.projects.map(x => normId(x.id)));
-    const keep = readRelation(page.properties, P.schedule.project).filter(id => !sharedIds.has(normId(id)));
-    properties[P.schedule.project].relation.push(...keep.map(id => ({ id })));
-  }
-
   const page = await notion(env, `/pages/${current.id}`, "PATCH", { properties });
-  const { _ownerRaw, ...item } = mapSchedule(page, env, config);
-  return item;
+  return mapSchedule(page, env, config);
 }
 
 async function deleteSchedule(request, env, session) {
   const config = await getConfig(env);
   const body = await readBody(request);
-  const current = await loadScheduleInScope(env, config, body.id);
+  const current = await loadScheduleInScope(env, config, body.id, session);
   if (!canEdit(current, session, config)) throw httpError(403, "내 일정이나 내가 입력한 일정만 지울 수 있어요.");
   await notion(env, `/pages/${current.id}`, "PATCH", { archived: true });
   return { id: current.id };
@@ -654,17 +658,10 @@ async function deleteExpense(request, env, session) {
 
 async function adminOptions(env) {
   const P = props(env);
-  const [projectPages, expenseSchema] = await Promise.all([
-    notionQueryAll(env, env.NOTION_PROJECT_DB_ID, { sorts: [{ property: P.project.title, direction: "ascending" }] }),
+  const [expenseSchema, scheduleSchema] = await Promise.all([
     notion(env, `/data_sources/${env.NOTION_EXPENSE_DB_ID}`),
+    notion(env, `/data_sources/${env.NOTION_SCHEDULE_DB_ID}`),
   ]);
-  const scheduleSchema = await notion(env, `/data_sources/${env.NOTION_SCHEDULE_DB_ID}`);
-
-  const projects = projectPages.map(pg => ({
-    id: pg.id,
-    title: readTitle(pg.properties) || "이름 없음",
-    status: readText(pg.properties, P.project.status),
-  }));
 
   const subject = expenseSchema.properties?.[P.expense.subject];
   const categories = (subject?.select?.options || subject?.multi_select?.options || []).map(o => o.name);
@@ -672,23 +669,31 @@ async function adminOptions(env) {
   const schedCat = scheduleSchema.properties?.[P.schedule.category];
   const scheduleCategories = (schedCat?.select?.options || []).map(o => o.name);
 
+  const has = (schema, names) => names.every(n => schema.properties?.[n]);
   const notionReady = {
-    schedule: Boolean(scheduleSchema.properties?.[P.owner] && scheduleSchema.properties?.[P.author]),
-    expense: Boolean(expenseSchema.properties?.[P.owner] && expenseSchema.properties?.[P.author]),
+    schedule: has(scheduleSchema, [P.owner, P.author, P.memo, P.kind, P.hide]),
+    expense: has(expenseSchema, [P.owner, P.author]),
   };
 
-  return { projects, categories, scheduleCategories, notionReady, ownerProp: P.owner, authorProp: P.author };
+  return { categories, scheduleCategories, notionReady, hideProp: P.hide };
 }
 
-// 일정 DB와 지출 DB에 '공유 담당자'(선택), '공유 작성자'(텍스트) 속성을 추가한다. 이미 있으면 건너뜀.
+// Notion 준비. 이미 있는 것은 건너뜀.
+// - 일정 DB: '공유 안 함'(체크박스), '공유 담당자'(선택), '공유 작성자'(텍스트), '공유 메모'(텍스트), '공유 분류'(선택: 일정/하자·AS)
+// - 지출 DB: '공유 담당자'(선택), '공유 작성자'(텍스트)
 async function setupNotionProps(env) {
   const P = props(env);
   const result = {};
   for (const [key, id] of [["schedule", env.NOTION_SCHEDULE_DB_ID], ["expense", env.NOTION_EXPENSE_DB_ID]]) {
     const schema = await notion(env, `/data_sources/${id}`);
     const add = {};
+    if (key === "schedule" && !schema.properties?.[P.hide]) add[P.hide] = { checkbox: {} };
     if (!schema.properties?.[P.owner]) add[P.owner] = { select: {} };
     if (!schema.properties?.[P.author]) add[P.author] = { rich_text: {} };
+    if (key === "schedule") {
+      if (!schema.properties?.[P.memo]) add[P.memo] = { rich_text: {} };
+      if (!schema.properties?.[P.kind]) add[P.kind] = { select: { options: [{ name: KINDS[0], color: "default" }, { name: KINDS[1], color: "orange" }] } };
+    }
     if (Object.keys(add).length) await notion(env, `/data_sources/${id}`, "PATCH", { properties: add });
     result[key] = Object.keys(add);
   }

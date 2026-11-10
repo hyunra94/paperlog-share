@@ -4,10 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#fbf7ed">
+<meta name="format-detection" content="telephone=no">
+<!-- 아이폰: 홈 화면에 추가하면 주소창 없이 앱처럼 열림 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="같이 Paper Log">
 <title>같이 쓰는 Paper Log</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icons/icon-192.png">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&family=Patrick+Hand&display=swap" rel="stylesheet">
@@ -15,7 +21,8 @@
 :root{--paper:#fbf7ed;--card:#fffdf7;--ink:#2f2a28;--sub:#786f65;--line:#2f2a28;--grid:#ece3d5;--blue:#9fcbdf;--yellow:#f4d98b;--pink:#e9b8b8;--green:#bfd8b8;--purple:#c9b8e8;--cal-head:#cfc6a4;--cal-cell:#fffdf8;--cal-muted:#ebe6dd;--cal-sel:#f1dc8c;--cal-today:#cfe6f3;--cal-red:#c86a6a;--cal-line:#5a5148;--nav:62px}
 *{box-sizing:border-box}[hidden]{display:none!important}
 body{margin:0;min-height:100svh;background:linear-gradient(90deg,rgba(47,42,40,.035) 1px,transparent 1px),linear-gradient(rgba(47,42,40,.035) 1px,transparent 1px),var(--paper);background-size:24px 24px;color:var(--ink);font-family:'Gowun Dodum',system-ui,sans-serif}
-button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .app{width:min(100%,430px);margin:auto;padding:calc(14px + env(safe-area-inset-top)) 14px calc(var(--nav) + 34px + env(safe-area-inset-bottom))}
 .head{position:relative;text-align:center;margin-bottom:12px;padding:0 46px}
 .logo{margin:0;font-family:'Gaegu';font-size:clamp(22px,6.6vw,32px);white-space:nowrap;font-weight:700;line-height:1}
@@ -55,18 +62,44 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
 .bar i{display:block;height:10px;border:1px solid var(--line);border-radius:999px;background:var(--pink)}
 .amount{font-family:'Gaegu';font-size:20px;font-weight:700;color:#8a4b4b;white-space:nowrap}
 .fab{position:fixed;right:max(16px,calc(50% - 199px));bottom:calc(var(--nav) + 24px + env(safe-area-inset-bottom));width:54px;height:54px;border:1.8px solid var(--line);border-radius:50%;background:var(--yellow);font-family:'Gaegu';font-size:32px;line-height:1;box-shadow:3px 3px 0 rgba(47,42,40,.18);z-index:40}
-.nav{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100vw - 20px),410px);height:var(--nav);display:grid;grid-template-columns:1fr 1fr;padding:6px;background:rgba(255,253,247,.96);border:1.8px solid var(--line);border-radius:22px;box-shadow:0 8px 24px rgba(47,42,40,.12),3px 3px 0 rgba(47,42,40,.16);z-index:45}
+.nav{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100vw - 20px),410px);height:var(--nav);display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px;background:rgba(255,253,247,.96);border:1.8px solid var(--line);border-radius:22px;box-shadow:0 8px 24px rgba(47,42,40,.12),3px 3px 0 rgba(47,42,40,.16);z-index:45}
 .navBtn{border:0;background:transparent;border-radius:16px;font-family:'Gaegu';font-size:22px}
 .navBtn.on{background:linear-gradient(transparent 22%,rgba(244,217,139,.78) 22% 78%,transparent 78%)}
-.sheetBg{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:12px;background:rgba(47,42,40,.25)}
-.sheet{width:min(100%,430px);max-height:88svh;overflow:auto;background:var(--card);border:1.8px solid var(--line);border-radius:24px 24px 18px 18px;padding:14px 14px 16px}
+.sheetBg{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:12px 12px calc(12px + env(safe-area-inset-bottom));background:rgba(47,42,40,.25)}
+.sheet{width:min(100%,430px);max-height:calc(88svh - env(safe-area-inset-top));overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--card);border:1.8px solid var(--line);border-radius:24px 24px 18px 18px;padding:14px 14px 16px}
 .sheet h3{margin:0 0 10px;font-family:'Gaegu';font-size:28px}
 .form{display:grid;gap:9px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .field{display:grid;gap:4px}
 .field label{font-family:'Gaegu';font-size:18px}
-.field input,.field select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);font-size:16px}
-.field input:disabled,.field select:disabled{background:#f3efe6;color:var(--sub)}
+.field input,.field select,.field textarea{width:100%;min-height:44px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);font-size:16px;-webkit-appearance:none;appearance:none}
+.field select{background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);background-position:calc(100% - 17px) 50%,calc(100% - 12px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:28px}
+.field textarea{min-height:96px;resize:vertical;line-height:1.5}
+/* 아이폰 Safari: 날짜·시간 칸이 비어 있으면 납작해지고 가운데 정렬되는 문제 */
+.field input[type=date],.field input[type=time]{display:block;text-align:left}
+.field input::-webkit-date-and-time-value{text-align:left;min-height:1.4em}
+.field input:disabled,.field select:disabled,.field textarea:disabled{background-color:#f3efe6;color:var(--sub);opacity:1;-webkit-text-fill-color:var(--sub)}
+.chips{display:flex;gap:6px}
+.chips label{flex:1}
+.chips input{position:absolute;opacity:0;pointer-events:none}
+.chips span{display:block;text-align:center;padding:9px 6px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);font-family:'Gaegu';font-size:19px}
+.chips input:checked+span{background:var(--yellow)}
+.chips input:disabled+span{opacity:.6}
+.hideCheck{display:flex;gap:8px;align-items:center;padding:10px 12px;border:1.5px dashed var(--line);border-radius:12px;font-size:15px}
+.hideCheck input{width:20px;height:20px;accent-color:#8a4b4b}
+.hideCheck small{color:var(--sub)}
+.hiddenItem{opacity:.5}
+.dot.off{opacity:.3}
+.memoText{white-space:pre-wrap;word-break:break-word;margin:6px 0 0;font-size:13px;line-height:1.55;color:var(--ink)}
+.asItem{display:block;width:100%;padding:11px 2px;border:0;border-bottom:1px solid var(--grid);background:none;text-align:left}
+.asItem:last-child{border-bottom:0}
+.asTop{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.asTop b{font-size:15px}
+.asDate{font-family:'Gaegu';font-size:18px;color:var(--sub)}
+.settle{margin-top:8px;padding:10px 12px;border:1.5px dashed var(--line);border-radius:14px;background:rgba(244,217,139,.25);font-size:14px;line-height:1.6}
+.install{margin-bottom:12px;padding:12px 14px;border:1.6px dashed var(--line);border-radius:16px;background:rgba(207,230,243,.45);font-size:13px;line-height:1.6}
+.install b{font-family:'Gaegu';font-size:19px}
+.install button{float:right;border:0;background:none;color:var(--sub);font-size:13px;text-decoration:underline;padding:0}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
 .actions.three{grid-template-columns:1fr 1fr 1fr}
 .btn{border:1.7px solid var(--line);border-radius:14px;background:var(--card);padding:10px;font-family:'Gaegu';font-size:21px;box-shadow:2px 2px 0 rgba(47,42,40,.12)}
@@ -76,7 +109,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
 .checks label{display:flex;gap:8px;align-items:center;font-size:14px}
 .checks small{color:var(--sub)}
 .member{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center}
-.member input{padding:8px 10px;border:1.4px solid var(--line);border-radius:10px;background:var(--card);font-size:14px;width:100%}
+.member input{padding:8px 10px;border:1.4px solid var(--line);border-radius:10px;background:var(--card);font-size:16px;width:100%}
 .member button{border:1.2px solid var(--line);border-radius:999px;background:#faecec;width:28px;height:28px}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%);z-index:80;max-width:90vw;padding:9px 14px;border:1.6px solid var(--line);border-radius:999px;background:var(--card);box-shadow:2px 2px 0 rgba(47,42,40,.14);font-size:13px}
 .loginWrap{min-height:80svh;display:grid;place-items:center}
@@ -88,6 +121,8 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
 
   <!-- 로그인 -->
   <section id="loginView" class="loginWrap" hidden>
+    <div style="width:100%">
+    <div class="install" id="installHintLogin" hidden></div>
     <div class="card">
       <h1 class="logo" style="text-align:center;margin-bottom:12px">같이 쓰는 Paper Log</h1>
       <form id="loginForm" class="form">
@@ -96,6 +131,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
         <button class="btn main" type="submit">들어가기</button>
         <p class="hint">코드는 이 앱을 공유해 준 사람에게 받아요.</p>
       </form>
+    </div>
     </div>
   </section>
 
@@ -106,6 +142,8 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       <h1 class="logo" id="appName">같이 쓰는 Paper Log</h1>
       <p class="who"><span id="whoAmI"></span> · <button class="linkBtn" id="logoutBtn">나가기</button></p>
     </header>
+
+    <div class="install" id="installHintMain" hidden></div>
 
     <div class="page on" id="page-calendar">
       <div class="card">
@@ -135,9 +173,17 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
           <div class="box"><span>건수</span><strong id="moneyCount">0건</strong></div>
         </div>
       </div>
-      <div class="card"><h3 class="sectionT">카테고리별</h3><div class="bars" id="byCategory"></div></div>
-      <div class="card"><h3 class="sectionT">사람별</h3><div class="bars" id="byOwner"></div></div>
+      <div class="card"><h3 class="sectionT">누가 냈나</h3><div class="bars" id="byOwner"></div><div class="settle" id="settle" hidden></div></div>
+      <div class="card" id="byCategoryCard"><h3 class="sectionT">카테고리별</h3><div class="bars" id="byCategory"></div></div>
       <div class="card"><h3 class="sectionT">내역</h3><div id="moneyList"></div></div>
+    </div>
+
+    <div class="page" id="page-as">
+      <div class="card">
+        <h3 class="sectionT">하자·AS 기록</h3>
+        <p class="hint">하자 보수나 AS 접수·방문·처리 상황을 날짜별로 남겨 두는 곳이에요. 달력에도 🔧로 같이 보여요.</p>
+      </div>
+      <div class="card"><div id="asList"></div></div>
     </div>
   </section>
 </div>
@@ -146,6 +192,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
 <nav class="nav" id="nav" hidden>
   <button class="navBtn on" data-page="calendar">일정</button>
   <button class="navBtn" data-page="money">가계부</button>
+  <button class="navBtn" data-page="as">하자·AS</button>
 </nav>
 
 <!-- 일정 시트 -->
@@ -153,13 +200,18 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
   <div class="sheet">
     <h3 id="scheduleSheetTitle">일정</h3>
     <form class="form" id="scheduleForm">
+      <div class="chips">
+        <label><input type="radio" name="kind" value="일정" checked><span>📅 일정</span></label>
+        <label><input type="radio" name="kind" value="하자·AS"><span>🔧 하자·AS</span></label>
+      </div>
       <div class="field"><label>제목</label><input name="title" required maxlength="200"></div>
       <div class="row2">
         <div class="field"><label>날짜</label><input name="date" type="date" required></div>
         <div class="field"><label>시간 (선택)</label><input name="time" type="time"></div>
       </div>
       <div class="field"><label>끝나는 날 (여러 날이면)</label><input name="endDate" type="date"></div>
-      <div class="field"><label>프로젝트</label><select name="projectId" required></select></div>
+      <div class="field"><label id="memoLabel">메모 (같이 보는 내용)</label><textarea name="memo" maxlength="2000" rows="4"></textarea></div>
+      <label class="hideCheck" id="hideField"><input type="checkbox" name="hidden"> 공유 안 함 <small>(체크하면 나만 보여요)</small></label>
       <div class="field"><label>누구 일정?</label><select name="owner" required></select></div>
       <p class="hint" id="scheduleMeta"></p>
       <div class="actions" id="scheduleActions">
@@ -205,10 +257,10 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       <div class="field">
         <label>Notion 준비</label>
         <p class="hint" id="notionReady"></p>
-        <button class="btn" type="button" id="setupNotionBtn">담당자·작성자 속성 추가하기</button>
+        <button class="btn" type="button" id="setupNotionBtn">Notion 준비하기</button>
       </div>
-      <div class="field"><label>공개할 프로젝트 (이 프로젝트의 일정만 보여요)</label><div class="checks" id="cfgProjects"></div></div>
-      <div class="field"><label>공개할 지출 카테고리</label><div class="checks" id="cfgCategories"></div></div>
+      <div class="field"><label>일정 공유 범위</label><p class="hint">모든 일정이 공유돼요. 숨길 일정은 Notion 일정 DB의 <b>'공유 안 함'</b>을 체크하거나, 이 앱에서 일정을 열어 체크하세요. 취소한 일정은 원래 안 보여요.</p></div>
+      <div class="field"><label>공개할 지출 카테고리</label><p class="hint">기본은 '공유' 카테고리예요.</p><div class="checks" id="cfgCategories"></div></div>
       <div class="field"><label>공유 앱에서 만든 일정의 카테고리</label><select id="cfgScheduleCategory"></select></div>
       <div class="field">
         <label>함께 쓰는 사람</label>
@@ -285,7 +337,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
   }
   function applyMe(data) {
     state.me = data.me;
-    state.cfg = { appName: data.appName, ownerName: data.ownerName, projects: data.projects, categories: data.categories, people: data.people };
+    state.cfg = { appName: data.appName, ownerName: data.ownerName, categories: data.categories, people: data.people };
     document.title = data.appName;
     $('#appName').textContent = data.appName;
     $('#whoAmI').textContent = `${data.me.name}님${data.me.admin && data.me.name !== '관리자' ? ' · 관리자' : ''}`;
@@ -315,9 +367,18 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
     state.page = b.dataset.page;
     $$('.navBtn').forEach(x => x.classList.toggle('on', x === b));
     $$('.page').forEach(p => p.classList.toggle('on', p.id === `page-${state.page}`));
-    if (state.page === 'money') loadMoney(); else loadCalendar();
+    refreshPage();
   }));
-  $('#fab').addEventListener('click', () => state.page === 'money' ? openExpense() : openSchedule());
+  function refreshPage() {
+    if (state.page === 'money') loadMoney();
+    else if (state.page === 'as') loadAs();
+    else loadCalendar();
+  }
+  $('#fab').addEventListener('click', () => {
+    if (state.page === 'money') openExpense();
+    else if (state.page === 'as') openSchedule(null, { kind: '하자·AS', date: ymd(new Date()) });
+    else openSchedule();
+  });
 
   /* ---------- 캘린더 ---------- */
   function expand(items, from, to) {
@@ -358,7 +419,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
       const k = ymd(d);
       const cls = ['day', d.getMonth() !== first.getMonth() && 'mute', d.getDay() === 0 && 'sun', k === today && 'today', k === state.selected && 'sel'].filter(Boolean).join(' ');
-      const dots = (byDay[k] || []).slice(0, 5).map(it => `<span class="dot" style="background:${colorOf(it.owner)}"></span>`).join('');
+      const dots = (byDay[k] || []).slice(0, 5).map(it => `<span class="dot${it.hidden ? ' off' : ''}" style="background:${colorOf(it.owner)}"></span>`).join('');
       html += `<button class="${cls}" data-day="${k}"><span class="num">${d.getDate()}</span><span class="dots">${dots}</span></button>`;
     }
     $('#cal').innerHTML = html;
@@ -370,17 +431,24 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
     $('#dayTitle').textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
     const list = (state.byDay?.[state.selected] || []).slice().sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
     $('#dayList').innerHTML = list.length ? list.map(it => `
-      <button class="item" data-schedule="${esc(it.id)}">
+      <button class="item${it.hidden ? ' hiddenItem' : ''}" data-schedule="${esc(it.id)}">
         <span class="time">${esc(it.time || '종일')}</span>
-        <span>${esc(it.title)}<small>${esc(it.projects.map(p => p.title).join(', '))}${it.date !== (it.endDate || it.date) ? ` · ${esc(it.date.slice(5))}~${esc(it.endDate.slice(5))}` : ''}</small></span>
+        <span>${it.hidden ? '🙈 ' : ''}${it.kind === '하자·AS' ? '🔧 ' : ''}${esc(it.title)}<small>${esc(subLine(it))}</small></span>
         <span class="tag" style="background:${colorOf(it.owner)}">${esc(it.owner)}${canEdit(it) ? '' : ' 🔒'}</span>
       </button>`).join('') : '<p class="empty">이 날은 일정이 없어요.</p>';
   }
 
+  function subLine(it) {
+    const parts = [];
+    if (it.hidden) parts.push('공유 안 함 · 나만 보임');
+    if (it.date !== (it.endDate || it.date)) parts.push(`${it.date.slice(5)}~${it.endDate.slice(5)}`);
+    if (it.memo) parts.push(it.memo.split('\n')[0].slice(0, 40));
+    return parts.filter(Boolean).join(' · ');
+  }
+
   function renderLegend() {
-    const projects = state.cfg.projects.map(p => esc(p.title)).join(', ') || '아직 없음';
     $('#legend').innerHTML = `<h3 class="sectionT">함께 보는 범위</h3>
-      <p class="hint">프로젝트: ${projects}</p>
+      <p class="hint">일정: '공유 안 함'에 체크하지 않은 일정 전부</p>
       <p class="hint">가계부 카테고리: ${esc(state.cfg.categories.join(', ') || '아직 없음')}</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${people().map(n => `<span class="tag" style="background:${colorOf(n)}">${esc(n)}</span>`).join('')}</div>`;
   }
@@ -420,19 +488,28 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
 
   /* ---------- 일정 시트 ---------- */
   let editingSchedule = null;
-  function openSchedule(item) {
-    if (!state.cfg.projects.length) return toast('아직 공개된 프로젝트가 없어요.');
+  function setKindUi(kind) {
+    const as = kind === '하자·AS';
+    $('#memoLabel').textContent = as ? '상황 메모 (증상, 접수번호, 기사님 연락처, 처리 결과 등)' : '메모 (같이 보는 내용)';
+    $('#scheduleForm').elements.title.placeholder = as ? '예: 욕실 실리콘 하자 접수' : '';
+  }
+  function openSchedule(item, preset = {}) {
     editingSchedule = item || null;
     const form = $('#scheduleForm'), f = form.elements;
     const editable = !item || canEdit(item);
-    $('#scheduleSheetTitle').textContent = item ? (editable ? '일정 고치기' : '일정 보기') : '일정 추가';
-    fillSelect(f.projectId, state.cfg.projects.map(p => ({ value: p.id, label: p.title })), item?.projects[0]?.id);
+    const kind = item?.kind || preset.kind || '일정';
+    const noun = kind === '하자·AS' ? '하자·AS' : '일정';
+    $('#scheduleSheetTitle').textContent = item ? (editable ? `${noun} 고치기` : `${noun} 보기`) : `${noun} 추가`;
+    $('#hideField').hidden = !state.me.admin; // '공유 안 함'은 관리자만
+    f.hidden.checked = Boolean(item?.hidden);
     fillSelect(f.owner, people().map(n => ({ value: n, label: n === state.me.name ? `${n} (나)` : n })), item ? item.owner : state.me.name);
+    f.kind.value = kind; setKindUi(kind);
     f.title.value = item?.title || '';
-    f.date.value = item?.date || state.selected;
+    f.date.value = item?.date || preset.date || state.selected;
     f.time.value = item?.time || '';
     f.endDate.value = item && item.endDate !== item.date ? item.endDate : '';
-    $$('input,select', form).forEach(el => (el.disabled = !editable));
+    f.memo.value = item?.memo || '';
+    $$('input,select,textarea', form).forEach(el => (el.disabled = !editable));
     $('#scheduleMeta').textContent = item
       ? `${item.author ? `${item.author}님이 입력` : 'Paper Log에서 입력'}${editable ? '' : ' · 담당자나 입력한 사람만 고칠 수 있어요.'}`
       : '다른 사람 일정도 대신 추가할 수 있어요.';
@@ -443,7 +520,9 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
   $('#scheduleForm').addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target.elements;
-    const body = { title: f.title.value.trim(), date: f.date.value, time: f.time.value, endDate: f.endDate.value, projectId: f.projectId.value, owner: f.owner.value };
+    const body = { kind: f.kind.value, title: f.title.value.trim(), date: f.date.value, time: f.time.value, endDate: f.endDate.value, memo: f.memo.value, owner: f.owner.value };
+    if (state.me.admin) body.hidden = f.hidden.checked;
+    if (!body.date) return toast('날짜를 골라 주세요.');
     if (body.endDate && body.endDate < body.date) return toast('끝나는 날이 시작일보다 빨라요.');
     try {
       if (editingSchedule) await api('/api/schedules', { method: 'PATCH', body: { id: editingSchedule.id, ...body } });
@@ -451,16 +530,41 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       $('#scheduleSheet').hidden = true; toast('저장했어요.');
       state.selected = body.date;
       const d = parse(body.date); state.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-      loadCalendar();
+      refreshPage();
     } catch (err) { toast(err.message); }
   });
+  $('#scheduleForm').addEventListener('change', e => { if (e.target.name === 'kind') setKindUi(e.target.value); });
   $('#scheduleActions').addEventListener('click', async e => {
     if (!e.target.closest('[data-delete]') || !editingSchedule) return;
     if (!confirm(`'${editingSchedule.title}' 일정을 지울까요?`)) return;
     try {
       await api('/api/schedules', { method: 'DELETE', body: { id: editingSchedule.id } });
-      $('#scheduleSheet').hidden = true; toast('지웠어요.'); loadCalendar();
+      $('#scheduleSheet').hidden = true; toast('지웠어요.'); refreshPage();
     } catch (err) { toast(err.message); }
+  });
+
+  /* ---------- 하자·AS ---------- */
+  async function loadAs() {
+    if (!state.asItems) $('#asList').innerHTML = '<p class="empty">불러오는 중…</p>';
+    try {
+      const data = await api('/api/schedules?kind=as');
+      state.asItems = data.schedules;
+      renderAs();
+    } catch (err) { toast(err.message); }
+  }
+  function renderAs() {
+    const list = state.asItems || [];
+    $('#asList').innerHTML = list.length ? list.map(it => `
+      <button class="asItem${it.hidden ? ' hiddenItem' : ''}" data-as="${esc(it.id)}">
+        <div class="asTop"><span class="asDate">${esc(it.date.replace(/-/g, '.'))}${it.time ? ` ${esc(it.time)}` : ''}</span>
+          <span class="tag" style="background:${colorOf(it.owner)}">${esc(it.owner)}${canEdit(it) ? '' : ' 🔒'}</span></div>
+        <b>${it.hidden ? '🙈 ' : ''}🔧 ${esc(it.title)}</b>
+        ${it.memo ? `<p class="memoText">${esc(it.memo)}</p>` : ''}
+      </button>`).join('') : '<p class="empty">아직 기록이 없어요. + 를 눌러 남겨 보세요.</p>';
+  }
+  $('#asList').addEventListener('click', e => {
+    const b = e.target.closest('[data-as]'); if (!b) return;
+    openSchedule(state.asItems.find(s => s.id === b.dataset.as));
   });
 
   /* ---------- 가계부 ---------- */
@@ -482,14 +586,35 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
     const m = state.money;
     $('#moneyTotal').textContent = won(m.total);
     $('#moneyCount').textContent = `${m.records.length}건`;
+    $('#byCategoryCard').hidden = state.cfg.categories.length < 2;
     $('#byCategory').innerHTML = bars(m.byCategory);
     $('#byOwner').innerHTML = bars(m.byOwner, colorOf);
+    renderSettle(m);
     $('#moneyList').innerHTML = m.records.length ? m.records.map(r => `
       <button class="item" data-expense="${esc(r.id)}">
         <span class="tag" style="background:${colorOf(r.owner)}">${esc(r.owner)}</span>
         <span>${esc(r.title)}<small>${esc(r.date.slice(5).replace('-', '.'))} · ${esc(r.category)}${canEdit(r) ? '' : ' · 🔒'}</small></span>
         <span class="amount">${won(r.amount)}</span>
       </button>`).join('') : '<p class="empty">이번 달 내역이 없어요.</p>';
+  }
+
+  // 똑같이 나눈다고 쳤을 때 누가 누구에게 얼마를 보내면 되는지 (참고용)
+  function renderSettle(m) {
+    const box = $('#settle');
+    const ps = people();
+    if (!m.total || ps.length < 2) { box.hidden = true; return; }
+    const share = m.total / ps.length;
+    const bal = ps.map(n => ({ n, d: Math.round((m.byOwner[n] || 0) - share) }));
+    const give = bal.filter(x => x.d < 0).map(x => ({ ...x, d: -x.d })), get = bal.filter(x => x.d > 0);
+    const lines = [];
+    for (let i = 0, j = 0; i < give.length && j < get.length;) {
+      const amt = Math.min(give[i].d, get[j].d);
+      if (amt > 0) lines.push(`<b>${esc(give[i].n)}</b> → <b>${esc(get[j].n)}</b> ${won(amt)}`);
+      give[i].d -= amt; get[j].d -= amt;
+      if (give[i].d <= 0) i++; if (get[j].d <= 0) j++;
+    }
+    box.innerHTML = `똑같이 나누면 1인당 ${won(Math.round(share))}<br>${lines.length ? lines.join('<br>') + ' 보내면 맞아요.' : '이미 똑같이 냈어요 🙌'}`;
+    box.hidden = false;
   }
 
   $$('[data-money-move]').forEach(b => b.addEventListener('click', () => {
@@ -556,7 +681,9 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
 
   function renderNotionReady(r) {
     const ok = r.schedule && r.expense;
-    $('#notionReady').textContent = ok ? '일정 DB와 지출 DB에 담당자·작성자 속성이 있어요.' : `아직 속성이 없는 DB가 있어요 (일정 ${r.schedule ? '✓' : '✗'}, 지출 ${r.expense ? '✓' : '✗'}). 버튼을 눌러 추가하세요.`;
+    $('#notionReady').textContent = ok
+      ? "Notion 준비가 끝났어요. (일정 DB: 공유 안 함·담당자·작성자·메모·분류 / 지출 DB: 담당자·작성자)"
+      : `아직 준비가 덜 됐어요 (일정 DB ${r.schedule ? '✓' : '✗'}, 지출 DB ${r.expense ? '✓' : '✗'}). 버튼을 누르면 없는 속성만 만들어요. '공유 안 함' 체크박스가 생기기 전까지는 모든 일정이 보여요.`;
     $('#setupNotionBtn').hidden = ok;
   }
 
@@ -568,9 +695,6 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       $('#cfgAppName').value = config.appName;
       $('#cfgOwnerName').value = config.ownerName;
       renderNotionReady(opts.notionReady);
-      const picked = new Set(config.projects.map(p => p.id.replace(/-/g, '')));
-      const projects = opts.projects.slice().sort((a, b) => Number(picked.has(b.id.replace(/-/g, ''))) - Number(picked.has(a.id.replace(/-/g, ''))));
-      $('#cfgProjects').innerHTML = projects.map(p => `<label><input type="checkbox" value="${esc(p.id)}" data-title="${esc(p.title)}" ${picked.has(p.id.replace(/-/g, '')) ? 'checked' : ''}> ${esc(p.title)} <small>${esc(p.status)}</small></label>`).join('') || '<p class="hint">프로젝트가 없어요.</p>';
       const cats = new Set(config.categories);
       const allCats = [...new Set([...opts.categories, ...config.categories])];
       $('#cfgCategories').innerHTML = allCats.map(c => `<label><input type="checkbox" value="${esc(c)}" ${cats.has(c) ? 'checked' : ''}> ${esc(c)}</label>`).join('') || '<p class="hint">카테고리가 없어요.</p>';
@@ -588,7 +712,7 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       const r = await api('/api/admin/setup-notion', { method: 'POST' });
       renderNotionReady({ schedule: true, expense: true });
       const added = [...r.added.schedule, ...r.added.expense];
-      toast(added.length ? 'Notion에 속성을 추가했어요.' : '이미 준비돼 있어요.');
+      toast(added.length ? 'Notion 준비를 마쳤어요.' : '이미 준비돼 있어요.');
     } catch (err) { toast(err.message); }
   });
 
@@ -596,7 +720,6 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
     const body = {
       appName: $('#cfgAppName').value,
       ownerName: $('#cfgOwnerName').value,
-      projects: $$('#cfgProjects input:checked').map(i => ({ id: i.value, title: i.dataset.title })),
       categories: $$('#cfgCategories input:checked').map(i => i.value),
       defaultScheduleCategory: $('#cfgScheduleCategory').value,
       members: $$('#cfgMembers .member').map(r => ({ name: r.querySelector('.mName').value.trim(), code: r.querySelector('.mCode').value })).filter(m => m.name),
@@ -606,12 +729,44 @@ button,input,select{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap
       const me = await api('/api/me');
       applyMe(me);
       $('#adminSheet').hidden = true; toast('설정을 저장했어요.');
-      state.page === 'money' ? loadMoney() : loadCalendar();
+      refreshPage();
     } catch (err) { toast(err.message); }
+  });
+
+  /* ---------- 아이폰 / 홈 화면 ---------- */
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  function renderInstallHint() {
+    const dismissed = localStorage.getItem('installHintOff') === '1';
+    const show = !standalone && !dismissed;
+    const html = isIOS
+      ? `<button type="button" data-hint-off>닫기</button><b>📱 홈 화면에 추가해 주세요</b><br>
+         Safari 아래쪽 <b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b>를 누르면 앱처럼 쓸 수 있어요.<br>
+         <span class="hint">아이폰은 Safari와 홈 화면 앱의 로그인이 따로라서, <b>홈 화면 아이콘으로 연 다음</b> 로그인해 주세요.</span>`
+      : `<button type="button" data-hint-off>닫기</button><b>📱 홈 화면에 추가하면 편해요</b><br>브라우저 메뉴에서 ‘홈 화면에 추가’ 또는 ‘앱 설치’를 눌러 주세요.`;
+    for (const id of ['#installHintLogin', '#installHintMain']) {
+      const el = $(id);
+      el.innerHTML = html;
+      // 로그인 화면에서는 아이폰이면 꼭 보여 주고, 본 화면에서는 닫을 수 있게
+      el.hidden = id === '#installHintLogin' ? !(isIOS && !standalone) : !show;
+    }
+  }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[data-hint-off]')) return;
+    localStorage.setItem('installHintOff', '1');
+    $$('.install').forEach(el => (el.hidden = true));
+  });
+
+  // 홈 화면 앱은 새로고침 버튼이 없으니, 다시 열 때(앞으로 돌아올 때) 최신 내용으로 갱신
+  let lastHidden = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { lastHidden = Date.now(); return; }
+    if (state.me && Date.now() - lastHidden > 30 * 1000) refreshPage();
   });
 
   /* ---------- 시작 ---------- */
   async function boot() {
+    renderInstallHint();
     if (!state.token) return showLogin();
     try { applyMe(await api('/api/me')); loadCalendar(); }
     catch (err) { if (state.token) toast(err.message); showLogin(); }
