@@ -78,6 +78,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
 /* 아이폰 Safari: 날짜·시간 칸이 비어 있으면 납작해지고 가운데 정렬되는 문제 */
 .field input[type=date],.field input[type=time]{display:block;text-align:left}
 .field input::-webkit-date-and-time-value{text-align:left;min-height:1.4em}
+.field input[type=checkbox]{width:20px;height:20px;min-height:0;padding:0;margin:0;flex:0 0 20px;border:0;-webkit-appearance:auto;appearance:auto;accent-color:#8a4b4b}
 .field input:disabled,.field select:disabled,.field textarea:disabled{background-color:#f3efe6;color:var(--sub);opacity:1;-webkit-text-fill-color:var(--sub)}
 .chips{display:flex;gap:6px}
 .chips label{flex:1}
@@ -106,7 +107,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
 .btn.main{background:var(--yellow)}.btn.danger{background:#faecec;color:#9f4f4f}
 .hint{margin:0;color:var(--sub);font-size:12px;line-height:1.5}
 .checks{display:grid;gap:6px;max-height:220px;overflow:auto;padding:8px;border:1.4px dashed rgba(47,42,40,.35);border-radius:14px}
-.checks label{display:flex;gap:8px;align-items:center;font-size:14px}
+.checks label{display:flex;gap:10px;align-items:center;font-size:15px;padding:6px 4px;cursor:pointer}
 .checks small{color:var(--sub)}
 .member{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center}
 .member input{padding:8px 10px;border:1.4px solid var(--line);border-radius:10px;background:var(--card);font-size:16px;width:100%}
