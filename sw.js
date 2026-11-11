@@ -1,4 +1,4 @@
-const CACHE_NAME = "paperlog-share-v2";
+const CACHE_NAME = "paperlog-share-v3";
 const APP_SHELL = ["./", "./index.html", "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 
 self.addEventListener("install", event => {

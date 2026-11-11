@@ -149,6 +149,7 @@ async function getConfig(env) {
     ownerName: "관리자",
     categories: [scopeName(env)], // 기본: '공유' 카테고리만
     defaultScheduleCategory: "",
+    hiddenProjects: [],           // 이 프로젝트에 연결된 일정은 체크 없이도 공유 안 함 (프로젝트 페이지 id, 대시 없이)
     members: [],                  // [{ name, salt, hash }]
     ...(raw || {}),
   };
@@ -247,6 +248,10 @@ async function saveAdminConfig(request, env) {
   if (body.appName !== undefined) config.appName = clean(body.appName, 40) || config.appName;
   if (body.ownerName !== undefined) config.ownerName = clean(body.ownerName, 40) || config.ownerName;
   if (body.defaultScheduleCategory !== undefined) config.defaultScheduleCategory = clean(body.defaultScheduleCategory, 40);
+
+  if (Array.isArray(body.hiddenProjects)) {
+    config.hiddenProjects = [...new Set(body.hiddenProjects.map(id => normId(clean(id, 64))).filter(id => /^[0-9a-f]{32}$/.test(id)))];
+  }
 
   if (Array.isArray(body.categories)) {
     config.categories = [...new Set(body.categories.map(c => clean(c, 60)).filter(Boolean))];
@@ -385,12 +390,14 @@ function mapSchedule(page, env, config) {
   const p = page.properties || {};
   const d = readDate(p, P.schedule.date);
   const owner = readText(p, P.owner);
+  const hiddenSet = new Set((config.hiddenProjects || []).map(normId));
   return {
     id: page.id,
     title: readTitle(p) || "제목 없음",
     ...d,
     canceled: readCheckbox(p, P.schedule.cancel),
     hidden: readCheckbox(p, P.hide),
+    hiddenByProject: readRelation(p, P.schedule.project).some(id => hiddenSet.has(normId(id))),
     owner: owner || config.ownerName,
     author: readText(p, P.author),
     kind: KINDS.includes(readText(p, P.kind)) ? readText(p, P.kind) : KINDS[0],
@@ -401,7 +408,7 @@ function mapSchedule(page, env, config) {
 // 공유 범위: '공유 안 함'에 체크하지 않은 일정 전부.
 // 체크한 일정은 멤버에게는 아예 내려주지 않고, 관리자에게만 '숨김' 표시로 보여 준다(다시 풀 수 있게).
 function scheduleVisible(item, session) {
-  return session.admin || !item.hidden;
+  return session.admin || (!item.hidden && !item.hiddenByProject);
 }
 
 async function listSchedules(url, env, session) {
@@ -658,10 +665,15 @@ async function deleteExpense(request, env, session) {
 
 async function adminOptions(env) {
   const P = props(env);
-  const [expenseSchema, scheduleSchema] = await Promise.all([
+  const [expenseSchema, scheduleSchema, projectPages] = await Promise.all([
     notion(env, `/data_sources/${env.NOTION_EXPENSE_DB_ID}`),
     notion(env, `/data_sources/${env.NOTION_SCHEDULE_DB_ID}`),
+    env.NOTION_PROJECT_DB_ID ? notionQueryAll(env, env.NOTION_PROJECT_DB_ID).catch(() => []) : [],
   ]);
+  const projects = projectPages
+    .filter(pg => !pg.archived && !pg.in_trash)
+    .map(pg => ({ id: normId(pg.id), title: readTitle(pg.properties) || "제목 없음", status: readText(pg.properties, P.project.status) }))
+    .sort((a, b) => a.title.localeCompare(b.title, "ko"));
 
   const subject = expenseSchema.properties?.[P.expense.subject];
   const categories = (subject?.select?.options || subject?.multi_select?.options || []).map(o => o.name);
@@ -675,7 +687,7 @@ async function adminOptions(env) {
     expense: has(expenseSchema, [P.owner, P.author]),
   };
 
-  return { categories, scheduleCategories, notionReady, hideProp: P.hide };
+  return { categories, scheduleCategories, projects, notionReady, hideProp: P.hide };
 }
 
 // Notion 준비. 이미 있는 것은 건너뜀.

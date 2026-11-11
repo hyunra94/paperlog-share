@@ -260,6 +260,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
         <button class="btn" type="button" id="setupNotionBtn">Notion 준비하기</button>
       </div>
       <div class="field"><label>일정 공유 범위</label><p class="hint">모든 일정이 공유돼요. 숨길 일정은 Notion 일정 DB의 <b>'공유 안 함'</b>을 체크하거나, 이 앱에서 일정을 열어 체크하세요. 취소한 일정은 원래 안 보여요.</p></div>
+      <div class="field"><label>통째로 숨길 프로젝트</label><p class="hint">여기 체크한 프로젝트에 연결된 일정은 '공유 안 함' 체크 없이도 언제나 숨겨져요. 앞으로 그 프로젝트에 추가하는 일정도 자동으로 숨겨져요.</p><div class="checks" id="cfgHiddenProjects"></div></div>
       <div class="field"><label>공개할 지출 카테고리</label><p class="hint">기본은 '공유' 카테고리예요.</p><div class="checks" id="cfgCategories"></div></div>
       <div class="field"><label>공유 앱에서 만든 일정의 카테고리</label><select id="cfgScheduleCategory"></select></div>
       <div class="field">
@@ -419,7 +420,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
       const k = ymd(d);
       const cls = ['day', d.getMonth() !== first.getMonth() && 'mute', d.getDay() === 0 && 'sun', k === today && 'today', k === state.selected && 'sel'].filter(Boolean).join(' ');
-      const dots = (byDay[k] || []).slice(0, 5).map(it => `<span class="dot${it.hidden ? ' off' : ''}" style="background:${colorOf(it.owner)}"></span>`).join('');
+      const dots = (byDay[k] || []).slice(0, 5).map(it => `<span class="dot${isOff(it) ? ' off' : ''}" style="background:${colorOf(it.owner)}"></span>`).join('');
       html += `<button class="${cls}" data-day="${k}"><span class="num">${d.getDate()}</span><span class="dots">${dots}</span></button>`;
     }
     $('#cal').innerHTML = html;
@@ -431,16 +432,19 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
     $('#dayTitle').textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
     const list = (state.byDay?.[state.selected] || []).slice().sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
     $('#dayList').innerHTML = list.length ? list.map(it => `
-      <button class="item${it.hidden ? ' hiddenItem' : ''}" data-schedule="${esc(it.id)}">
+      <button class="item${isOff(it) ? ' hiddenItem' : ''}" data-schedule="${esc(it.id)}">
         <span class="time">${esc(it.time || '종일')}</span>
-        <span>${it.hidden ? '🙈 ' : ''}${it.kind === '하자·AS' ? '🔧 ' : ''}${esc(it.title)}<small>${esc(subLine(it))}</small></span>
+        <span>${isOff(it) ? '🙈 ' : ''}${it.kind === '하자·AS' ? '🔧 ' : ''}${esc(it.title)}<small>${esc(subLine(it))}</small></span>
         <span class="tag" style="background:${colorOf(it.owner)}">${esc(it.owner)}${canEdit(it) ? '' : ' 🔒'}</span>
       </button>`).join('') : '<p class="empty">이 날은 일정이 없어요.</p>';
   }
 
+  function isOff(it) { return Boolean(it.hidden || it.hiddenByProject); }
+
   function subLine(it) {
     const parts = [];
     if (it.hidden) parts.push('공유 안 함 · 나만 보임');
+    else if (it.hiddenByProject) parts.push('숨긴 프로젝트 · 나만 보임');
     if (it.date !== (it.endDate || it.date)) parts.push(`${it.date.slice(5)}~${it.endDate.slice(5)}`);
     if (it.memo) parts.push(it.memo.split('\n')[0].slice(0, 40));
     return parts.filter(Boolean).join(' · ');
@@ -555,10 +559,10 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
   function renderAs() {
     const list = state.asItems || [];
     $('#asList').innerHTML = list.length ? list.map(it => `
-      <button class="asItem${it.hidden ? ' hiddenItem' : ''}" data-as="${esc(it.id)}">
+      <button class="asItem${isOff(it) ? ' hiddenItem' : ''}" data-as="${esc(it.id)}">
         <div class="asTop"><span class="asDate">${esc(it.date.replace(/-/g, '.'))}${it.time ? ` ${esc(it.time)}` : ''}</span>
           <span class="tag" style="background:${colorOf(it.owner)}">${esc(it.owner)}${canEdit(it) ? '' : ' 🔒'}</span></div>
-        <b>${it.hidden ? '🙈 ' : ''}🔧 ${esc(it.title)}</b>
+        <b>${isOff(it) ? '🙈 ' : ''}🔧 ${esc(it.title)}</b>
         ${it.memo ? `<p class="memoText">${esc(it.memo)}</p>` : ''}
       </button>`).join('') : '<p class="empty">아직 기록이 없어요. + 를 눌러 남겨 보세요.</p>';
   }
@@ -698,6 +702,8 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       const cats = new Set(config.categories);
       const allCats = [...new Set([...opts.categories, ...config.categories])];
       $('#cfgCategories').innerHTML = allCats.map(c => `<label><input type="checkbox" value="${esc(c)}" ${cats.has(c) ? 'checked' : ''}> ${esc(c)}</label>`).join('') || '<p class="hint">카테고리가 없어요.</p>';
+      const hp = new Set(config.hiddenProjects || []);
+      $('#cfgHiddenProjects').innerHTML = (opts.projects || []).map(p => `<label><input type="checkbox" value="${esc(p.id)}" ${hp.has(p.id) ? 'checked' : ''}> ${esc(p.title)}${p.status ? ` <small>${esc(p.status)}</small>` : ''}</label>`).join('') || '<p class="hint">프로젝트를 불러오지 못했어요.</p>';
       fillSelect($('#cfgScheduleCategory'), [{ value: '', label: '(비워 두기)' }, ...opts.scheduleCategories.map(c => ({ value: c, label: c }))], config.defaultScheduleCategory || '');
       const box = $('#cfgMembers'); box.innerHTML = '';
       config.members.forEach(m => box.appendChild(memberRow(m.name, m.hasCode)));
@@ -721,6 +727,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       appName: $('#cfgAppName').value,
       ownerName: $('#cfgOwnerName').value,
       categories: $$('#cfgCategories input:checked').map(i => i.value),
+      hiddenProjects: $$('#cfgHiddenProjects input:checked').map(i => i.value),
       defaultScheduleCategory: $('#cfgScheduleCategory').value,
       members: $$('#cfgMembers .member').map(r => ({ name: r.querySelector('.mName').value.trim(), code: r.querySelector('.mCode').value })).filter(m => m.name),
     };
