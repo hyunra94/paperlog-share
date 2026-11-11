@@ -20,4 +20,4 @@ SHARE_AUTHOR_PROP = "공유 작성자"
 #   npx wrangler kv namespace create SHARE_KV
 [[kv_namespaces]]
 binding = "SHARE_KV"
-id = "REPLACE_WITH_SHARE_KV_ID"
+id = "13d932e208aa48e99afc5828f319a6d0"
