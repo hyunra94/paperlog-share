@@ -8,7 +8,7 @@ compatibility_date = "2026-05-29"
 
 [vars]
 # 공유 앱이 열리는 주소. 여러 개면 쉼표로 구분
-CORS_ORIGIN = "https://hyunra.kr,https://hyunra94.github.io,http://localhost:5173"
+CORS_ORIGIN = "https://share.hyunra.kr,https://hyunra.kr,https://hyunra94.github.io,http://localhost:5173"
 NOTION_PROJECT_DB_ID = "1ff6b59b-151a-81ab-89da-000b670b3d57"
 NOTION_SCHEDULE_DB_ID = "1ff6b59b-151a-8124-9557-000b4f60b050"
 NOTION_EXPENSE_DB_ID = "2fc6b59b-151a-8192-b855-000b2eda1402"

@@ -5,7 +5,7 @@ PaperLog 중 **숨기지 않은 일정**과 **공개한 카테고리의 지출**
 
 PaperLog 저장소와는 완전히 따로 있어요. PaperLog 코드나 Worker는 건드리지 않아요.
 
-- 화면: 이 저장소 루트 (`index.html`) → GitHub Pages로 배포하면 `https://hyunra94.github.io/paperlog-share/`
+- 화면: 이 저장소 루트 (`index.html`) → GitHub Pages로 배포하면 `https://share.hyunra.kr/` (CNAME 파일, 가비아 DNS에 `share` CNAME → `hyunra94.github.io`)
 - Worker: `worker/` → `https://paperlog-share.hyunra94.workers.dev`
 - PaperLog Worker의 `SECRET_KEY`는 쓰지 않아요. 공유 Worker는 공개 범위 밖의 데이터를 읽지도, 쓰지도 않아요.
 
