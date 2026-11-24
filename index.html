@@ -263,6 +263,15 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
         <p class="hint" id="notionReady"></p>
         <button class="btn" type="button" id="setupNotionBtn">Notion 준비하기</button>
       </div>
+      <div class="field">
+        <label>아침 8시 일정 알림</label>
+        <p class="hint" id="pushHint">이 기기에서 매일 아침 8시에 오늘 공유 일정을 알림으로 받아요. 일정이 없는 날은 오지 않아요.</p>
+        <div class="row2">
+          <button class="btn" type="button" id="pushOnBtn">이 기기에서 받기</button>
+          <button class="btn" type="button" id="pushTestBtn" hidden>시험 알림</button>
+        </div>
+        <button class="btn" type="button" id="pushOffBtn" hidden>이 기기에서 그만 받기</button>
+      </div>
       <div class="field"><label>일정 공유 범위</label><p class="hint">모든 일정이 공유돼요. 숨길 일정은 Notion 일정 DB의 <b>'공유 안 함'</b>을 체크하거나, 이 앱에서 일정을 열어 체크하세요. 취소한 일정은 원래 안 보여요.</p></div>
       <div class="field"><label>통째로 숨길 프로젝트</label><p class="hint">여기 체크한 프로젝트에 연결된 일정은 '공유 안 함' 체크 없이도 언제나 숨겨져요. 앞으로 그 프로젝트에 추가하는 일정도 자동으로 숨겨져요.</p><div class="checks" id="cfgHiddenProjects"></div></div>
       <div class="field"><label>공개할 지출 카테고리</label><p class="hint">기본은 '공유' 카테고리예요.</p><div class="checks" id="cfgCategories"></div></div>
@@ -716,6 +725,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       const box = $('#cfgMembers'); box.innerHTML = '';
       config.members.forEach(m => box.appendChild(memberRow(m.name, m.hasCode, m.siniId, m.scheduleCategory)));
       openSheet('#adminSheet');
+      renderPush().catch(() => {});
     } catch (err) { toast(err.message); }
   });
 
@@ -746,6 +756,64 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       $('#adminSheet').hidden = true; toast('설정을 저장했어요.');
       refreshPage();
     } catch (err) { toast(err.message); }
+  });
+
+  /* ---------- 아침 8시 알림 ---------- */
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  async function currentSub() {
+    if (!pushSupported) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+  async function renderPush() {
+    const hint = $('#pushHint');
+    if (!pushSupported) {
+      $('#pushOnBtn').hidden = true;
+      hint.textContent = isIOS && !standalone
+        ? '아이폰은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요(iOS 16.4 이상). 홈 화면 아이콘으로 열어 주세요.'
+        : '이 브라우저는 알림을 지원하지 않아요.';
+      return;
+    }
+    const sub = await currentSub().catch(() => null);
+    const on = Boolean(sub) && Notification.permission === 'granted';
+    $('#pushOnBtn').hidden = on;
+    $('#pushTestBtn').hidden = !on;
+    $('#pushOffBtn').hidden = !on;
+    if (Notification.permission === 'denied') hint.textContent = '알림이 꺼져 있어요. 기기 설정에서 이 앱의 알림을 허용해 주세요.';
+    else hint.textContent = on ? '이 기기에서 매일 아침 8시에 오늘 공유 일정을 받아요. 일정이 없는 날은 오지 않아요.' : '이 기기에서 매일 아침 8시에 오늘 공유 일정을 알림으로 받아요. 일정이 없는 날은 오지 않아요.';
+  }
+  function b64uToU8(s) {
+    const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
+    return Uint8Array.from(b, c => c.charCodeAt(0));
+  }
+  $('#pushOnBtn').addEventListener('click', async () => {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('알림을 허용해야 받을 수 있어요.'); return renderPush(); }
+      const { key } = await api('/api/push/key');
+      if (!key) throw new Error('알림 설정이 아직 안 됐어요.');
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToU8(key) });
+      await api('/api/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+      toast('아침 8시 알림을 켰어요.');
+    } catch (err) { toast(err.message); }
+    renderPush();
+  });
+  $('#pushTestBtn').addEventListener('click', async () => {
+    try {
+      const sub = await currentSub();
+      await api('/api/push/test', { method: 'POST', body: { endpoint: sub?.endpoint } });
+      toast('시험 알림을 보냈어요.');
+    } catch (err) { toast(err.message); }
+  });
+  $('#pushOffBtn').addEventListener('click', async () => {
+    try {
+      const sub = await currentSub();
+      if (sub) { await api('/api/push/subscribe', { method: 'DELETE', body: { endpoint: sub.endpoint } }); await sub.unsubscribe(); }
+      toast('이 기기에서 알림을 껐어요.');
+    } catch (err) { toast(err.message); }
+    renderPush();
   });
 
   /* ---------- 아이폰 / 홈 화면 ---------- */

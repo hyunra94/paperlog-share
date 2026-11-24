@@ -20,8 +20,16 @@ SHARE_AUTHOR_PROP = "공유 작성자"
 SUPABASE_URL = "https://ulrfeuafmbbobxnklnuy.supabase.co"
 SUPABASE_KEY = "sb_publishable_cSB0pp5RkvngY4VUD8as3Q_P_0X7QWn"
 
+# 아침 8시 알림(Web Push). 공개키만 여기, 개인키는 secret VAPID_PRIVATE.
+VAPID_PUBLIC = "BJ5iyvWMFL9U7Z_w2LXq3BCQVWf2vx54NEM6dEx5dyGoAN_hEuu5ZrbBU-uwfxylb2QNB-hByaf5ueQ4IWEMiM8"
+# 일과기록 알림 서버용 브리핑 암호는 secret BRIEFING_SECRET (사용자가 직접 입력)
+
 # 공유 설정·로그인 세션 저장소. 아래 명령으로 만든 뒤 나온 id를 넣는다
 #   npx wrangler kv namespace create SHARE_KV
 [[kv_namespaces]]
 binding = "SHARE_KV"
 id = "13d932e208aa48e99afc5828f319a6d0"
+
+# 매일 08:00 KST(= 23:00 UTC) 아침 브리핑 알림
+[triggers]
+crons = ["0 23 * * *"]

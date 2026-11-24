@@ -31,6 +31,14 @@ export default {
       if (!env.SHARE_KV) throw httpError(500, "SHARE_KV가 연결되지 않았어요.");
       if (path === "/api/login" && method === "POST") return json(await login(request, env), 200, cors);
 
+      // 서버끼리 호출: 일과기록 알림 서버가 아침 브리핑용으로 그날 공유 일정을 받아 간다.
+      if (path === "/api/briefing" && method === "GET") {
+        const secret = request.headers.get("x-briefing-secret") || "";
+        if (!env.BRIEFING_SECRET || !safeEqual(secret, env.BRIEFING_SECRET)) return json({ ok: false, error: "Forbidden" }, 403, cors);
+        return json({ ok: true, ...(await briefing(env, url.searchParams.get("date"))) }, 200, cors);
+      }
+      if (path === "/api/push/key" && method === "GET") return json({ ok: true, key: env.VAPID_PUBLIC || "" }, 200, cors);
+
       const session = await getSession(request, env);
       if (!session) return json({ ok: false, error: "로그인이 필요해요." }, 401, cors);
 
@@ -48,6 +56,11 @@ export default {
       if (path === "/api/schedules" && method === "POST") return json({ ok: true, item: await createSchedule(request, env, session) }, 200, cors);
       if (path === "/api/schedules" && method === "PATCH") return json({ ok: true, item: await updateSchedule(request, env, session) }, 200, cors);
       if (path === "/api/schedules" && method === "DELETE") return json({ ok: true, ...(await deleteSchedule(request, env, session)) }, 200, cors);
+
+      // 아침 알림: 이 기기를 등록/해제, 시험 발송
+      if (path === "/api/push/subscribe" && method === "POST") return json({ ok: true, ...(await pushSubscribe(request, env, session)) }, 200, cors);
+      if (path === "/api/push/subscribe" && method === "DELETE") return json({ ok: true, ...(await pushUnsubscribe(request, env)) }, 200, cors);
+      if (path === "/api/push/test" && method === "POST") return json({ ok: true, ...(await pushTest(request, env, session)) }, 200, cors);
 
       if (path === "/api/expenses" && method === "GET") return json({ ok: true, ...(await listExpenses(url, env)) }, 200, cors);
       if (path === "/api/expenses" && method === "POST") return json({ ok: true, item: await createExpense(request, env, session) }, 200, cors);
@@ -69,6 +82,11 @@ export default {
       return json({ ok: false, error: err.message || "Worker error" }, status, cors);
     }
   },
+
+  // 매일 08:00 KST (crons = "0 23 * * *" UTC): 이 앱에서 알림을 켠 기기에 오늘 공유 일정 브리핑
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendMorningBriefing(env));
+  },
 };
 
 /* ---------------- 공통 ---------------- */
@@ -80,7 +98,7 @@ function corsHeaders(request, env) {
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,x-share-token,x-sini-token",
+    "Access-Control-Allow-Headers": "Content-Type,x-share-token,x-sini-token,x-briefing-secret",
     "Content-Type": "application/json; charset=utf-8",
     "Vary": "Origin",
   };
@@ -458,6 +476,179 @@ function mapSchedule(page, env, config) {
 // 체크한 일정은 멤버에게는 아예 내려주지 않고, 관리자에게만 '숨김' 표시로 보여 준다(다시 풀 수 있게).
 function scheduleVisible(item, session) {
   return session.admin || (!item.hidden && !item.hiddenByProject);
+}
+
+/* ---------------- 아침 브리핑 ---------------- */
+
+function kstToday() {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// 그날(date)에 걸친 공유 일정: 취소·숨김 제외, 시간순(종일 먼저).
+async function sharedSchedulesOn(env, config, date) {
+  const P = props(env);
+  const pages = await notionQueryAll(env, env.NOTION_SCHEDULE_DB_ID, {
+    filter: { and: [
+      { property: P.schedule.date, date: { on_or_after: subtractDays(date, RANGE_LOOKBACK_DAYS) } },
+      { property: P.schedule.date, date: { on_or_before: date } },
+    ] },
+  });
+  return pages
+    .map(pg => mapSchedule(pg, env, config))
+    .filter(it => !it.canceled && !it.hidden && !it.hiddenByProject && it.date && it.date <= date && (it.endDate || it.date) >= date)
+    .map(it => ({ title: it.title, time: it.date === date ? it.time : "", endDate: it.endDate || it.date, owner: it.owner, kind: it.kind }))
+    .sort((a, b) => (a.time || "").localeCompare(b.time || "") || a.title.localeCompare(b.title, "ko"));
+}
+
+async function briefing(env, dateParam) {
+  const config = await getConfig(env);
+  const date = isDate(dateParam) ? dateParam : kstToday();
+  const schedules = await sharedSchedulesOn(env, config, date);
+  // 지금은 공유 범위가 모두에게 같아서 멤버마다 같은 목록을 준다.
+  const members = config.members.filter(m => m.siniId).map(m => ({ siniId: m.siniId, name: m.name, schedules }));
+  return { date, ownerName: config.ownerName, members };
+}
+
+function briefingText(schedules) {
+  const lines = schedules.slice(0, 6).map(s => `${s.time || "종일"} ${s.title}${s.owner ? ` (${s.owner})` : ""}`);
+  if (schedules.length > 6) lines.push(`외 ${schedules.length - 6}개`);
+  return lines.join("\n");
+}
+
+/* ---------------- Web Push (RFC 8291 aes128gcm + VAPID, 외부 라이브러리 없음) ---------------- */
+
+const PUSH_KEY = "push:subs";
+const enc = new TextEncoder();
+
+function b64uToBytes(s) {
+  const b = atob(String(s).replace(/-/g, "+").replace(/_/g, "/") + "===".slice((String(s).length + 3) % 4));
+  return Uint8Array.from(b, c => c.charCodeAt(0));
+}
+function bytesToB64u(bytes) {
+  let s = "";
+  for (const x of new Uint8Array(bytes)) s += String.fromCharCode(x);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function concatBytes(...parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+async function hkdf(salt, ikm, info, length) {
+  const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, length * 8));
+}
+
+async function vapidAuthHeader(endpoint, env) {
+  const pub = b64uToBytes(env.VAPID_PUBLIC);
+  const jwk = { kty: "EC", crv: "P-256", x: bytesToB64u(pub.slice(1, 33)), y: bytesToB64u(pub.slice(33, 65)), d: env.VAPID_PRIVATE, ext: true };
+  const key = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const header = bytesToB64u(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const payload = bytesToB64u(enc.encode(JSON.stringify({
+    aud: new URL(endpoint).origin,
+    exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+    sub: env.VAPID_SUBJECT || "https://share.hyunra.kr",
+  })));
+  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(`${header}.${payload}`));
+  return `vapid t=${header}.${payload}.${bytesToB64u(sig)}, k=${env.VAPID_PUBLIC}`;
+}
+
+// 구독 정보로 payload를 암호화한 본문(aes128gcm)을 만든다.
+async function encryptPushPayload(sub, payloadText) {
+  const uaPublic = b64uToBytes(sub.keys.p256dh);
+  const authSecret = b64uToBytes(sub.keys.auth);
+  const local = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const asPublic = new Uint8Array(await crypto.subtle.exportKey("raw", local.publicKey));
+  const uaKey = await crypto.subtle.importKey("raw", uaPublic, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const ecdhSecret = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: uaKey }, local.privateKey, 256));
+  const ikm = await hkdf(authSecret, ecdhSecret, concatBytes(enc.encode("WebPush: info\0"), uaPublic, asPublic), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, enc.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(salt, ikm, enc.encode("Content-Encoding: nonce\0"), 12);
+  const aesKey = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
+  const plain = concatBytes(enc.encode(payloadText), new Uint8Array([2])); // 마지막 레코드 구분자
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plain));
+  const rs = new Uint8Array([0, 0, 16, 0]); // 4096
+  return concatBytes(salt, rs, new Uint8Array([asPublic.length]), asPublic, cipher);
+}
+
+// 보내고 결과 상태 코드를 돌려준다. 404/410이면 구독이 끝난 것.
+async function sendPush(sub, data, env) {
+  const body = await encryptPushPayload(sub, JSON.stringify(data));
+  const res = await fetch(sub.endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: await vapidAuthHeader(sub.endpoint, env),
+      "Content-Encoding": "aes128gcm",
+      "Content-Type": "application/octet-stream",
+      TTL: "43200",
+      Urgency: "normal",
+    },
+    body,
+  });
+  return res.status;
+}
+
+async function getSubs(env) {
+  return (await env.SHARE_KV.get(PUSH_KEY, "json")) || [];
+}
+
+function validSub(s) {
+  try {
+    const u = new URL(s?.endpoint || "");
+    return u.protocol === "https:" && s.keys && b64uToBytes(s.keys.p256dh).length === 65 && b64uToBytes(s.keys.auth).length === 16;
+  } catch { return false; }
+}
+
+async function pushSubscribe(request, env, session) {
+  if (!env.VAPID_PUBLIC || !env.VAPID_PRIVATE) throw httpError(503, "알림 설정이 아직 안 됐어요.");
+  const body = await readBody(request);
+  const sub = body.subscription;
+  if (!validSub(sub)) throw httpError(400, "알림 등록 정보가 올바르지 않아요.");
+  const subs = (await getSubs(env)).filter(s => s.endpoint !== sub.endpoint);
+  subs.push({ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, name: session.name, admin: Boolean(session.admin), addedAt: new Date().toISOString() });
+  await env.SHARE_KV.put(PUSH_KEY, JSON.stringify(subs.slice(-20)));
+  return { registered: true };
+}
+
+async function pushUnsubscribe(request, env) {
+  const body = await readBody(request);
+  const subs = await getSubs(env);
+  await env.SHARE_KV.put(PUSH_KEY, JSON.stringify(subs.filter(s => s.endpoint !== body.endpoint)));
+  return { removed: true };
+}
+
+// 등록한 기기 중 지금 사람의 것에만 시험 알림
+async function pushTest(request, env, session) {
+  const body = await readBody(request);
+  const subs = (await getSubs(env)).filter(s => s.endpoint === body.endpoint || (!body.endpoint && s.name === session.name));
+  if (!subs.length) throw httpError(404, "이 기기는 아직 알림 등록이 안 됐어요.");
+  const statuses = [];
+  for (const s of subs) statuses.push(await sendPush(s, { title: "알림 테스트", body: "아침 8시에 이렇게 오늘 일정을 알려 드려요.", url: "./" }, env));
+  return { statuses };
+}
+
+async function sendMorningBriefing(env) {
+  if (!env.VAPID_PUBLIC || !env.VAPID_PRIVATE) return { sent: 0, reason: "no vapid" };
+  const subs = await getSubs(env);
+  if (!subs.length) return { sent: 0 };
+  const config = await getConfig(env);
+  const date = kstToday();
+  const schedules = await sharedSchedulesOn(env, config, date);
+  if (!schedules.length) return { sent: 0, reason: "no schedules" }; // 일정 없으면 안 보냄
+  const data = { title: `오늘 일정 ${schedules.length}개`, body: briefingText(schedules), url: "./", tag: `brief-${date}` };
+  const keep = [];
+  let sent = 0;
+  for (const s of subs) {
+    let status = 0;
+    try { status = await sendPush(s, data, env); } catch { status = 0; }
+    if (status === 404 || status === 410) continue; // 끝난 구독은 정리
+    if (status >= 200 && status < 300) sent++;
+    keep.push(s);
+  }
+  if (keep.length !== subs.length) await env.SHARE_KV.put(PUSH_KEY, JSON.stringify(keep));
+  return { sent };
 }
 
 async function listSchedules(url, env, session) {
