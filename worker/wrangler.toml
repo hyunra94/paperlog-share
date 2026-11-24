@@ -16,6 +16,10 @@ NOTION_EXPENSE_DB_ID = "2fc6b59b-151a-8192-b855-000b2eda1402"
 SHARE_OWNER_PROP = "공유 담당자"
 SHARE_AUTHOR_PROP = "공유 작성자"
 
+# 일과기록(sini) 앱 연결: 그 앱의 로그인 토큰을 이 Supabase에 확인한다. publishable 키는 공개돼도 되는 키.
+SUPABASE_URL = "https://ulrfeuafmbbobxnklnuy.supabase.co"
+SUPABASE_KEY = "sb_publishable_cSB0pp5RkvngY4VUD8as3Q_P_0X7QWn"
+
 # 공유 설정·로그인 세션 저장소. 아래 명령으로 만든 뒤 나온 id를 넣는다
 #   npx wrangler kv namespace create SHARE_KV
 [[kv_namespaces]]

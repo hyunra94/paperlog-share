@@ -111,6 +111,8 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
 .checks small{color:var(--sub)}
 .member{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center}
 .member input{padding:8px 10px;border:1.4px solid var(--line);border-radius:10px;background:var(--card);font-size:16px;width:100%}
+.member .mSini{grid-column:1/3;font-size:14px}
+.member{padding-bottom:6px;border-bottom:1px dashed rgba(47,42,40,.2)}
 .member button{border:1.2px solid var(--line);border-radius:999px;background:#faecec;width:28px;height:28px}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%);z-index:80;max-width:90vw;padding:9px 14px;border:1.6px solid var(--line);border-radius:999px;background:var(--card);box-shadow:2px 2px 0 rgba(47,42,40,.14);font-size:13px}
 .loginWrap{min-height:80svh;display:grid;place-items:center}
@@ -674,12 +676,13 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
   });
 
   /* ---------- 관리자 설정 ---------- */
-  function memberRow(name = '', hasCode = false) {
+  function memberRow(name = '', hasCode = false, siniId = '') {
     const div = document.createElement('div');
     div.className = 'member';
     div.innerHTML = `<input class="mName" placeholder="이름" maxlength="40" value="${esc(name)}">
       <input class="mCode" type="text" placeholder="${hasCode ? '코드 유지' : '새 코드 (4자 이상)'}" autocomplete="off">
-      <button type="button" title="빼기">✕</button>`;
+      <button type="button" title="빼기">✕</button>
+      <input class="mSini" placeholder="일과기록 아이디 (연결하면 그 앱에서 바로 들어와요)" maxlength="60" autocapitalize="off" autocomplete="off" value="${esc(siniId)}">`;
     div.querySelector('button').addEventListener('click', () => div.remove());
     return div;
   }
@@ -707,7 +710,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       $('#cfgHiddenProjects').innerHTML = (opts.projects || []).map(p => `<label><input type="checkbox" value="${esc(p.id)}" ${hp.has(p.id) ? 'checked' : ''}> ${esc(p.title)}${p.status ? ` <small>${esc(p.status)}</small>` : ''}</label>`).join('') || '<p class="hint">프로젝트를 불러오지 못했어요.</p>';
       fillSelect($('#cfgScheduleCategory'), [{ value: '', label: '(비워 두기)' }, ...opts.scheduleCategories.map(c => ({ value: c, label: c }))], config.defaultScheduleCategory || '');
       const box = $('#cfgMembers'); box.innerHTML = '';
-      config.members.forEach(m => box.appendChild(memberRow(m.name, m.hasCode)));
+      config.members.forEach(m => box.appendChild(memberRow(m.name, m.hasCode, m.siniId)));
       openSheet('#adminSheet');
     } catch (err) { toast(err.message); }
   });
@@ -730,7 +733,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       categories: $$('#cfgCategories input:checked').map(i => i.value),
       hiddenProjects: $$('#cfgHiddenProjects input:checked').map(i => i.value),
       defaultScheduleCategory: $('#cfgScheduleCategory').value,
-      members: $$('#cfgMembers .member').map(r => ({ name: r.querySelector('.mName').value.trim(), code: r.querySelector('.mCode').value })).filter(m => m.name),
+      members: $$('#cfgMembers .member').map(r => ({ name: r.querySelector('.mName').value.trim(), code: r.querySelector('.mCode').value, siniId: r.querySelector('.mSini').value.trim() })).filter(m => m.name),
     };
     try {
       await api('/api/admin/config', { method: 'PUT', body });

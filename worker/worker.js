@@ -80,7 +80,7 @@ function corsHeaders(request, env) {
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,x-share-token",
+    "Access-Control-Allow-Headers": "Content-Type,x-share-token,x-sini-token",
     "Content-Type": "application/json; charset=utf-8",
     "Vary": "Origin",
   };
@@ -165,7 +165,11 @@ function publicConfig(config) {
 }
 
 function adminView(config) {
-  return { ...config, members: config.members.map(m => ({ name: m.name, hasCode: Boolean(m.hash) })) };
+  return { ...config, members: config.members.map(m => ({ name: m.name, hasCode: Boolean(m.hash), siniId: m.siniId || "" })) };
+}
+
+function cleanSiniId(v) {
+  return clean(v, 60).toLowerCase().replace(/@.*$/, "");
 }
 
 function publicMe(session) {
@@ -176,8 +180,36 @@ function tokenOf(request) {
   return request.headers.get("x-share-token") || "";
 }
 
+// 일과기록(sini) 앱에서 온 요청: 그 앱의 Supabase 로그인 토큰을 Supabase에 확인하고,
+// 관리자 설정에서 그 아이디와 연결한 멤버로 인정한다. (관리자 권한은 절대 주지 않음)
+async function siniSession(siniToken, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_KEY) throw httpError(503, "일과기록 연결이 설정되지 않았어요.");
+  if (siniToken.length < 20 || siniToken.length > 4096) return null;
+  const cacheKey = `sini:${await sha256Hex(siniToken)}`;
+  let email = await env.SHARE_KV.get(cacheKey);
+  if (!email) {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${siniToken}` },
+    });
+    if (!res.ok) return null; // 만료·위조 토큰
+    const user = await res.json().catch(() => ({}));
+    email = String(user.email || "").toLowerCase();
+    if (!email) return null;
+    await env.SHARE_KV.put(cacheKey, email, { expirationTtl: 300 }); // 5분 동안 다시 묻지 않음
+  }
+  const domain = (env.SINI_ID_DOMAIN || "@sini.hyunra.kr").toLowerCase();
+  if (!email.endsWith(domain)) return null;
+  const siniId = email.slice(0, -domain.length);
+  const config = await getConfig(env);
+  const member = config.members.find(m => m.siniId && m.siniId === siniId);
+  if (!member) throw httpError(403, "아직 공유 앱과 연결되지 않은 계정이에요. 관리자에게 일과기록 아이디 연결을 부탁하세요.");
+  return { name: member.name, admin: false, via: "sini" };
+}
+
 async function getSession(request, env) {
   const token = tokenOf(request);
+  const siniToken = request.headers.get("x-sini-token") || "";
+  if (!token && siniToken) return siniSession(siniToken, env);
   if (!token || token.length < 20) return null;
   const session = await env.SHARE_KV.get(`session:${token}`, "json");
   if (!session) return null;
@@ -257,25 +289,39 @@ async function saveAdminConfig(request, env) {
     config.categories = [...new Set(body.categories.map(c => clean(c, 60)).filter(Boolean))];
   }
 
-  // members: [{ name, code? }] — code가 있으면 새로 설정, 없으면 기존 코드 유지
+  // members: [{ name, code?, siniId? }] — code가 있으면 새로 설정, 없으면 기존 코드 유지
+  // siniId: 일과기록 앱 아이디. 연결하면 그 앱에서 따로 코드 없이 이 멤버로 들어온다.
   if (Array.isArray(body.members)) {
     const old = new Map(config.members.map(m => [m.name, m]));
     const next = [];
     const seen = new Set([config.ownerName]);
+    const seenSini = new Set();
     for (const m of body.members) {
       const name = clean(m?.name, 40);
       if (!name || seen.has(name)) continue;
       seen.add(name);
+      const prev = old.get(name) || {};
+      const siniId = m.siniId !== undefined ? cleanSiniId(m.siniId) : (prev.siniId || "");
+      if (siniId) {
+        if (!/^[a-z0-9._-]{2,40}$/.test(siniId)) throw httpError(400, `${name}님의 일과기록 아이디를 확인해 주세요.`);
+        if (seenSini.has(siniId)) throw httpError(400, `일과기록 아이디 '${siniId}'가 두 사람에게 연결돼 있어요.`);
+        seenSini.add(siniId);
+      }
       const code = String(m.code || "");
+      let entry;
       if (code) {
         if (code.length < 4) throw httpError(400, `${name}님의 코드는 4자 이상이어야 해요.`);
         const salt = randomHex(8);
-        next.push({ name, salt, hash: await sha256Hex(`${salt}:${code}`) });
-      } else if (old.has(name)) {
-        next.push(old.get(name));
+        entry = { name, salt, hash: await sha256Hex(`${salt}:${code}`) };
+      } else if (prev.hash) {
+        entry = { name, salt: prev.salt, hash: prev.hash };
+      } else if (siniId) {
+        entry = { name }; // 일과기록으로만 들어오는 사람
       } else {
-        throw httpError(400, `${name}님의 코드를 정해 주세요.`);
+        throw httpError(400, `${name}님의 코드를 정하거나 일과기록 아이디를 연결해 주세요.`);
       }
+      if (siniId) entry.siniId = siniId;
+      next.push(entry);
     }
     config.members = next;
   }
