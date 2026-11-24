@@ -165,7 +165,7 @@ function publicConfig(config) {
 }
 
 function adminView(config) {
-  return { ...config, members: config.members.map(m => ({ name: m.name, hasCode: Boolean(m.hash), siniId: m.siniId || "" })) };
+  return { ...config, members: config.members.map(m => ({ name: m.name, hasCode: Boolean(m.hash), siniId: m.siniId || "", scheduleCategory: m.scheduleCategory || "" })) };
 }
 
 function cleanSiniId(v) {
@@ -321,6 +321,8 @@ async function saveAdminConfig(request, env) {
         throw httpError(400, `${name}님의 코드를 정하거나 일과기록 아이디를 연결해 주세요.`);
       }
       if (siniId) entry.siniId = siniId;
+      const scheduleCategory = m.scheduleCategory !== undefined ? clean(m.scheduleCategory, 60) : (prev.scheduleCategory || "");
+      if (scheduleCategory) entry.scheduleCategory = scheduleCategory;
       next.push(entry);
     }
     config.members = next;
@@ -444,6 +446,7 @@ function mapSchedule(page, env, config) {
     canceled: readCheckbox(p, P.schedule.cancel),
     hidden: readCheckbox(p, P.hide),
     hiddenByProject: readRelation(p, P.schedule.project).some(id => hiddenSet.has(normId(id))),
+    category: readText(p, P.schedule.category),
     owner: owner || config.ownerName,
     author: readText(p, P.author),
     kind: KINDS.includes(readText(p, P.kind)) ? readText(p, P.kind) : KINDS[0],
@@ -525,10 +528,13 @@ function scheduleFields(body, config, env, session, { create }) {
   if (body.hidden !== undefined && session.admin) {
     out[P.hide] = { checkbox: Boolean(body.hidden) };
   }
-  if (create && config.defaultScheduleCategory) {
-    out[P.schedule.category] = selectProp(config.defaultScheduleCategory);
-  }
   return out;
+}
+
+// 담당자별 일정 카테고리: 멤버마다 정한 카테고리(예: 시은 → '언니'), 없으면 기본 카테고리.
+function categoryForOwner(owner, config) {
+  const member = config.members.find(m => m.name === owner);
+  return (member && member.scheduleCategory) || config.defaultScheduleCategory || "";
 }
 
 async function createSchedule(request, env, session) {
@@ -541,6 +547,8 @@ async function createSchedule(request, env, session) {
   const properties = scheduleFields(body, config, env, session, { create: true });
   properties[P.owner] = selectProp(owner);
   properties[P.author] = nameProp(session.name);
+  const cat = categoryForOwner(owner, config);
+  if (cat) properties[P.schedule.category] = selectProp(cat);
 
   const page = await notion(env, "/pages", "POST", {
     parent: { type: "data_source_id", data_source_id: env.NOTION_SCHEDULE_DB_ID },
@@ -561,6 +569,12 @@ async function updateSchedule(request, env, session) {
     const owner = clean(body.owner, 40);
     if (!validPerson(owner, config)) throw httpError(400, "담당자를 확인해 주세요.");
     properties[P.owner] = selectProp(owner);
+    // 담당자가 바뀌면, 카테고리가 비어 있거나 이전 담당자의 자동 카테고리였을 때만 새 담당자 것으로 바꾼다.
+    const prevAuto = categoryForOwner(current.owner, config);
+    if (owner !== current.owner && (!current.category || current.category === prevAuto)) {
+      const cat = categoryForOwner(owner, config);
+      if (cat) properties[P.schedule.category] = selectProp(cat);
+    }
   }
 
   const page = await notion(env, `/pages/${current.id}`, "PATCH", { properties });

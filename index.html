@@ -111,7 +111,8 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
 .checks small{color:var(--sub)}
 .member{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center}
 .member input{padding:8px 10px;border:1.4px solid var(--line);border-radius:10px;background:var(--card);font-size:16px;width:100%}
-.member .mSini{grid-column:1/3;font-size:14px}
+.member .mSini,.member .mCat{grid-column:1/3;font-size:14px}
+.member .mCat{padding:8px 10px;border:1.4px solid var(--line);border-radius:10px;background:var(--card);width:100%}
 .member{padding-bottom:6px;border-bottom:1px dashed rgba(47,42,40,.2)}
 .member button{border:1.2px solid var(--line);border-radius:999px;background:#faecec;width:28px;height:28px}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%);z-index:80;max-width:90vw;padding:9px 14px;border:1.6px solid var(--line);border-radius:999px;background:var(--card);box-shadow:2px 2px 0 rgba(47,42,40,.14);font-size:13px}
@@ -265,7 +266,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       <div class="field"><label>일정 공유 범위</label><p class="hint">모든 일정이 공유돼요. 숨길 일정은 Notion 일정 DB의 <b>'공유 안 함'</b>을 체크하거나, 이 앱에서 일정을 열어 체크하세요. 취소한 일정은 원래 안 보여요.</p></div>
       <div class="field"><label>통째로 숨길 프로젝트</label><p class="hint">여기 체크한 프로젝트에 연결된 일정은 '공유 안 함' 체크 없이도 언제나 숨겨져요. 앞으로 그 프로젝트에 추가하는 일정도 자동으로 숨겨져요.</p><div class="checks" id="cfgHiddenProjects"></div></div>
       <div class="field"><label>공개할 지출 카테고리</label><p class="hint">기본은 '공유' 카테고리예요.</p><div class="checks" id="cfgCategories"></div></div>
-      <div class="field"><label>공유 앱에서 만든 일정의 카테고리</label><select id="cfgScheduleCategory"></select></div>
+      <div class="field"><label>공유 앱에서 만든 일정의 기본 카테고리</label><p class="hint">사람마다 따로 정하려면 아래 '함께 쓰는 사람'에서 고르세요. 내가 담당자인 일정은 이 기본값을 써요.</p><select id="cfgScheduleCategory"></select></div>
       <div class="field">
         <label>함께 쓰는 사람</label>
         <p class="hint">코드는 저장하면 다시 볼 수 없어요. 바꾸려면 새 코드를 적고 저장하세요. 비워 두면 기존 코드를 그대로 써요.</p>
@@ -676,13 +677,16 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
   });
 
   /* ---------- 관리자 설정 ---------- */
-  function memberRow(name = '', hasCode = false, siniId = '') {
+  function memberRow(name = '', hasCode = false, siniId = '', scheduleCategory = '') {
+    const cats = [...new Set([...(state.adminOpts?.scheduleCategories || []), scheduleCategory].filter(Boolean))];
+    const catOptions = `<option value="">일정 카테고리: 기본값</option>` + cats.map(c => `<option value="${esc(c)}" ${c === scheduleCategory ? 'selected' : ''}>일정 카테고리: ${esc(c)}</option>`).join('');
     const div = document.createElement('div');
     div.className = 'member';
     div.innerHTML = `<input class="mName" placeholder="이름" maxlength="40" value="${esc(name)}">
       <input class="mCode" type="text" placeholder="${hasCode ? '코드 유지' : '새 코드 (4자 이상)'}" autocomplete="off">
       <button type="button" title="빼기">✕</button>
-      <input class="mSini" placeholder="일과기록 아이디 (연결하면 그 앱에서 바로 들어와요)" maxlength="60" autocapitalize="off" autocomplete="off" value="${esc(siniId)}">`;
+      <input class="mSini" placeholder="일과기록 아이디 (연결하면 그 앱에서 바로 들어와요)" maxlength="60" autocapitalize="off" autocomplete="off" value="${esc(siniId)}">
+      <select class="mCat" title="이 사람이 담당자인 일정을 새로 만들 때 Notion 카테고리">${catOptions}</select>`;
     div.querySelector('button').addEventListener('click', () => div.remove());
     return div;
   }
@@ -710,7 +714,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       $('#cfgHiddenProjects').innerHTML = (opts.projects || []).map(p => `<label><input type="checkbox" value="${esc(p.id)}" ${hp.has(p.id) ? 'checked' : ''}> ${esc(p.title)}${p.status ? ` <small>${esc(p.status)}</small>` : ''}</label>`).join('') || '<p class="hint">프로젝트를 불러오지 못했어요.</p>';
       fillSelect($('#cfgScheduleCategory'), [{ value: '', label: '(비워 두기)' }, ...opts.scheduleCategories.map(c => ({ value: c, label: c }))], config.defaultScheduleCategory || '');
       const box = $('#cfgMembers'); box.innerHTML = '';
-      config.members.forEach(m => box.appendChild(memberRow(m.name, m.hasCode, m.siniId)));
+      config.members.forEach(m => box.appendChild(memberRow(m.name, m.hasCode, m.siniId, m.scheduleCategory)));
       openSheet('#adminSheet');
     } catch (err) { toast(err.message); }
   });
@@ -733,7 +737,7 @@ button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;-w
       categories: $$('#cfgCategories input:checked').map(i => i.value),
       hiddenProjects: $$('#cfgHiddenProjects input:checked').map(i => i.value),
       defaultScheduleCategory: $('#cfgScheduleCategory').value,
-      members: $$('#cfgMembers .member').map(r => ({ name: r.querySelector('.mName').value.trim(), code: r.querySelector('.mCode').value, siniId: r.querySelector('.mSini').value.trim() })).filter(m => m.name),
+      members: $$('#cfgMembers .member').map(r => ({ name: r.querySelector('.mName').value.trim(), code: r.querySelector('.mCode').value, siniId: r.querySelector('.mSini').value.trim(), scheduleCategory: r.querySelector('.mCat').value })).filter(m => m.name),
     };
     try {
       await api('/api/admin/config', { method: 'PUT', body });
